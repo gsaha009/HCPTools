@@ -13,36 +13,32 @@ class TComplex:
         #    re = ak.Array([re])
         #if isinstance(im, (int, float)):
         #    im = ak.Array([im])
-        
+
+        if isinstance(re, ak.Array):
+            if isinstance(im, (int, float)):
+                im = im * ak.ones_like(re)
+        elif isinstance(re, np.ndarray):
+            if isinstance(im, (int, float)):
+                im = im * np.ones_like(re)
+                
         self.set_complex_numbers(re, im, polar)
 
+        
     def set_complex_numbers(self, re, im, polar):        
         if polar:
             if isinstance(re, (int, float)):
                 if re < 0:
                     print("Warning: Modulo of a complex number should be >= 0, taking the absolute value.")
-                    re = abs(re)
+                    re = np.abs(re)
                 self.fRe = re * np.cos(im)
                 self.fIm = re * np.sin(im)
             elif isinstance(re, ak.Array):
-                if isinstance(im, (int, float)):
-                    im = im * ak.ones_like(re)
                 self.fRe = ak.where(re < 0, np.abs(re) * np.cos(im), re * np.cos(im))
                 self.fIm = ak.where(re < 0, np.abs(re) * np.sin(im), re * np.sin(im))
             elif isinstance(re, np.ndarray):
-                if isinstance(im, (int, float)):
-                    im = im * np.ones_like(re)
                 self.fRe = np.where(re < 0, np.abs(re) * np.cos(im), re * np.cos(im))
                 self.fIm = np.where(re < 0, np.abs(re) * np.sin(im), re * np.sin(im))
-            #if re < 0:
-            #    print("Warning: Modulo of a complex number should be >= 0, taking the absolute value.")
-            #    re = abs(re)
-            #self.fRe = re * np.cos(im)
-            #self.fIm = re * np.sin(im)
         else:
-            if isinstance(re, ak.Array):
-                if isinstance(im, (int, float)):
-                    im = im * ak.ones_like(re)
             self.fRe = re
             self.fIm = im
 
@@ -59,7 +55,18 @@ class TComplex:
         return self.fRe**2 + self.fIm**2
 
     def Theta(self):
-        return ak.where((self.fIm != 0) | (self.fRe != 0), np.arctan2(self.fIm, self.fRe), 0)
+        if isinstance(self.fRe, (int, float)):
+            return np.arctan2(self.fIm, self.fRe) if (self.fIm or self.fRe) else 0
+
+        elif isinstance(self.fRe, np.ndarray):
+            dummy = np.zeros_like(self.fRe)
+            return np.where(mask, np.arctan2(self.fIm, self.fRe), dummy)
+        elif isinstance(self.fRe, ak.Array):
+            dummy = ak.zeros_like(self.fRe)
+            return ak.where(mask, np.arctan2(self.fIm, self.fRe), dummy)
+        else:
+            raise RuntimeError("no specific type")
+        #return ak.where((self.fIm != 0) | (self.fRe != 0), np.arctan2(self.fIm, self.fRe), 0)
         #return np.arctan2(self.fIm, self.fRe) if (self.fIm or self.fRe) else 0
 
     def Sqrt(self):
