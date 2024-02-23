@@ -3,6 +3,7 @@ import awkward as ak
 from coffea.nanoevents.methods import vector
 import matplotlib.pyplot as plt
 
+from TComplex import TComplex
 from util import *
 
 
@@ -79,7 +80,7 @@ class PolarimetricA1:
         self.beta_phases = [  0.00,  0.99, -0.15,  0.53,  0.56,  0.23, -0.54 ]
         assert len(self.beta_moduli) == self.numResonances and len(self.beta_phases) == self.numResonances
 
-        self.beta = [TComplex(self.beta_moduli[i], self.beta_phases[i]*np.pi, True) for i in range(len(self.numResonances))]
+        self.beta = [TComplex(self.beta_moduli[i], self.beta_phases[i]*np.pi, True) for i in range(self.numResonances)]
 
         # metric tensor g^{mu,nu}
         self.g = np.array([[-1.0, -1.0, -1.0, -1.0],
@@ -92,14 +93,23 @@ class PolarimetricA1:
         boostvec = frame.boostvec
         return p.boost(boostvec.negative())
         
-        
-    def operator(self) -> ak.Array:
-        #P = setp4(name="PtEtaPhiMLorentzVector",
-        #          ak.zeros_like(self.P.pt),
-        #          ak.zeros_like(self.P.eta),
-        #          ak.zeros_like(self.P.phi),
+
+    def Setup(self):
+        pass
+
+    
+    def PVC(self) -> ak.Array:
+        #dummy = ak.zeros_like(self.P.pt)
+        #P = setp4("PtEtaPhiMLorentzVector",
+        #          dummy,
+        #          dummy,
+        #          dummy,
         #          self.P.mass)
         P  = self.Boost(self.P, self.P)
+        #p1 = self.p1
+        #p2 = self.p2
+        #p3 = self.p3
+
         p1 = self.Boost(self.p1, self.P)
         p2 = self.Boost(self.p2, self.P)
         p3 = self.Boost(self.p3, self.P)
@@ -108,21 +118,26 @@ class PolarimetricA1:
 
         # p1, p2, p3, decayChannel
         J   = self.comp_J(p1, p2, p3)
-
+        print(f" >>> J: {J[0]}, {J[1]}, {J[2]}, {J[3]}")
+        print(f"J[0]: {J[0].Re()}, {J[0].Im()}, {type(J[0].Im())}")
+        print(f"J[1]: {J[1].Re()}, {J[1].Im()}, {type(J[1].Im())}")
+        
         Pi  = self.comp_Pi(J, N)
-
+        print(f" >>> Pi: {Pi}")
+        
         # charge
         Pi5 = self.comp_Pi5(J, N)
-
+        print(f" >>> Pi5: {Pi5}")
+        
         # CV: Standard Model value, cf. text following Eq. (3.15) in Comput.Phys.Commun. 64 (1991) 275
         gammaVA = 1.0
 
         # CV: sign of terms proportional to gammaVA differs for tau+ and tau-,
         #     cf. text following Eq. (3.16) in Comput.Phys.Commun. 64 (1991) 275
         sign = 0.0
-        if    self.charge == +1: sign = -1.
-        elif  se;f.charge == -1: sign = +1.
-        else assert(0)
+        if    self.taucharge == +1: sign = -1.
+        elif  self.taucharge == -1: sign = +1.
+        else: assert False
 
         omega = P.dot(Pi - sign*gammaVA*Pi5)
     
@@ -133,25 +148,322 @@ class PolarimetricA1:
         return retVal
 
 
-    def star(self, p) -> ak.Array:
+    def comp_J(self, p1: ak.Array, p2: ak.Array, p3: ak.Array) -> TComplex:
+        """
+        Args:
+          p1, p2, p3: awkward array of Lorentz Vectors
+
+        Return:
+          Awkward array of TComplex objects
+        """
+        print(" --- comp_J --- ")
+        print(f" p1: {p1}, {p1.type}")
+        q1 = p2 - p3
+        q2 = p3 - p1
+        q3 = p1 - p2
+
+        h1 = p2 + p3
+        Q1 = h1 - p1
+        s1 = h1.mass2
+        h2 = p1 + p3
+        Q2 = h2 - p2
+        s2 = h2.mass2
+        h3 = p1 + p2
+        Q3 = h3 - p3
+        s3 = h3.mass2
+
+        m1, m2, m3 = 0., 0., 0.
+        if self.decayChannel == "k3ChargedPi":
+            m1 = self.m_chargedPi
+            m2 = self.m_chargedPi
+            m3 = self.m_chargedPi
+        elif self.decayChannel == "kChargedPi2NeutralPi":
+            m1 = self.m_neutralPi
+            m2 = self.m_neutralPi
+            m3 = self.m_chargedPi
+        else:
+            raise RuntimeError(f"Error in <PolarimetricVectorTau2a1::comp_J>: Invalid parameter 'decayChannel' = {self.decayChannel}")
+
+  
+        a = p1 + p2 + p3
+        s = a.mass2
+
+        T = np.zeros((4,4), dtype=TComplex)
+        for mu in range(4):
+            for nu in range(4):
+                # CV: all vectors without explicit mu indices are assumed to have the mu index as subscript,
+                #     hence multiplication with the product of metric tensors g^{mu,mu}*g^{nu,nu} is required to transform
+                #     the return value of the functions get_component(a, mu)*get_component(a, nu) into the expression a^{mu}*a^{nu}
+                #     when computing T^{mu,nu} = g^{mu,nu} - a^{mu}a^{nu}/a^2,
+                #     as described in text following Eq. (A2) in Phys.Rev.D 61 (2000) 012002
+                #comp1np = ak.to_numpy(self.get_component(a, mu))
+                #comp2np = ak.to_numpy(self.get_component(a, nu))
+                #snp     = ak.to_numpy(s)
+                #T[mu][nu] = TComplex(self.g[mu][nu] - self.g[mu][mu]*self.g[nu][nu]*self.get_component(a, mu)*self.get_component(a, nu)/s)
+                T[mu][nu] = TComplex(self.g[mu][nu] - self.g[mu][mu]*self.g[nu][nu]*self.get_component(a, mu)*self.get_component(a, nu)/ak.to_numpy(s))
+                #T[mu][nu] = TComplex((self.g[mu][nu] - self.g[mu][mu]*self.g[nu][nu]*comp1np*comp2np/snp).flatten())
+                
+
+        print(f"T: {T}")
+        # compute amplitudes for individual resonances according to Eq. (A3) in Phys.Rev.D 61 (2000) 012002
+        # Note: all the factors F_R in Eq. (A3) are equal to one, as the nominal fit assumes the a1 size parameter R to be zero
+        #j = [np.zeros((4,snp.shape[0],1), dtype=TComplex) for _ in range(self.numResonances)]
+        j = [np.zeros(4, dtype=TComplex) for _ in range(self.numResonances)]
+
+        cq1 = self.convert_to_cLorentzVector(q1)
+        cq2 = self.convert_to_cLorentzVector(q2)
+        
+        #j[0] = T@(self.BreitWigner(self.m0_rho770,  self.Gamma0_rho770,  s1, m2, m3, 1)*cq1 - self.BreitWigner(self.m0_rho770,  self.Gamma0_rho770,  s2, m1, m3, 1)*cq2)
+        #j[1] = T@(self.BreitWigner(self.m0_rho1450, self.Gamma0_rho1450, s1, m2, m3, 1)*cq1 - self.BreitWigner(self.m0_rho1450, self.Gamma0_rho1450, s2, m1, m3, 1)*cq2)
+        j01   = self.get_compJ_comps(self.BreitWigner(self.m0_rho770,  self.Gamma0_rho770,  s1, m2, m3, 1), cq1)
+        j02   = self.get_compJ_comps(self.BreitWigner(self.m0_rho770,  self.Gamma0_rho770,  s2, m1, m3, 1), cq2)
+        j0    = j01 - j02
+        print(f"j0: {j0}")
+        #j0   = self.BreitWigner(self.m0_rho770,  self.Gamma0_rho770,  s1, m2, m3, 1)*cq1 - self.BreitWigner(self.m0_rho770,  self.Gamma0_rho770,  s2, m1, m3, 1)*cq2
+        #j[0] = np.sum(T * j0.T, axis=1)
+        j[0]  = T@j0
+        #j[0] = self.get_mult_comps(T, j0)
+        print(f"j[0]: {j[0]}, {j[0].shape}")
+
+
+        # --------------------- 1 -------------------- #
+        j11   = self.get_compJ_comps(self.BreitWigner(self.m0_rho1450, self.Gamma0_rho1450, s1, m2, m3, 1), cq1)
+        j12   = self.get_compJ_comps(self.BreitWigner(self.m0_rho1450, self.Gamma0_rho1450, s2, m1, m3, 1), cq2)
+        j1    = j11 - j12
+        #j1   = self.BreitWigner(self.m0_rho1450, self.Gamma0_rho1450, s1, m2, m3, 1)*cq1 - self.BreitWigner(self.m0_rho1450, self.Gamma0_rho1450, s2, m1, m3, 1)*cq2
+        #j[1] = np.sum(T * j1.T, axis=1)
+        j[1] = T@j1
+        print(f"j[1]: {j[1]}, {j[1].shape}")
+        
+        # --------------------- 2 -------------------- #
+        aXq1 = ak.to_numpy(a.dot(q1))
+        print(f"aXq1: {aXq1}")
+        cQ1 = self.convert_to_cLorentzVector(Q1)
+        
+        aXq2 = ak.to_numpy(a.dot(q2))
+        print(f"aXq2: {aXq2}")        
+        cQ2 = self.convert_to_cLorentzVector(Q2)
+        
+        #j[2] = T@(aXq1*self.BreitWigner(self.m0_rho770,  self.Gamma0_rho770,  s1, m2, m3, 1)*cQ1 - aXq2*self.BreitWigner(self.m0_rho770,  self.Gamma0_rho770,  s2, m1, m3, 1)*cQ2)
+        #j[3] = T@(aXq1*self.BreitWigner(self.m0_rho1450, self.Gamma0_rho1450, s1, m2, m3, 1)*cQ1 - aXq2*self.BreitWigner(self.m0_rho1450, self.Gamma0_rho1450, s2, m1, m3, 1)*cQ2)
+        j21   = self.get_compJ_comps(self.BreitWigner(self.m0_rho770, self.Gamma0_rho770,  s1, m2, m3, 1), cQ1)
+        j21   = self.get_mult_arrs(j21, aXq1)
+
+        j22   = self.get_compJ_comps(self.BreitWigner(self.m0_rho770,  self.Gamma0_rho770,  s2, m1, m3, 1), cQ2) 
+        j22   = self.get_mult_arrs(j22, aXq2)
+
+        j2    = j21 - j22
+        j[2]  = T@j2
+        print(f"j[2]: {j[2]}, {j[2].shape}")
+
+        
+        # ------------------- 3 ----------------- #
+        j31  = self.get_compJ_comps(self.BreitWigner(self.m0_rho1450, self.Gamma0_rho1450, s1, m2, m3, 1), cQ1)
+        j31  = self.get_mult_arrs(j31, aXq1)
+
+        j32  = self.get_compJ_comps(self.BreitWigner(self.m0_rho1450, self.Gamma0_rho1450, s2, m1, m3, 1), cQ2)
+        j32  = self.get_mult_arrs(j32, aXq2)
+        
+        #j3   = aXq1*self.BreitWigner(self.m0_rho1450, self.Gamma0_rho1450, s1, m2, m3, 1)*cQ1 - aXq2*self.BreitWigner(self.m0_rho1450, self.Gamma0_rho1450, s2, m1, m3, 1)*cQ2
+        j3   = j31 - j32
+        #j[3] = np.sum(T * j3.T, axis=1)
+        j[3] = T@j3
+        print(f"j[3]: {j[3]}, {j[3].shape}")
+        
+
+        # ------------------- 4 ------------------ #
+        aXq3 = ak.to_numpy(a.dot(q3))
+        cq3 = self.convert_to_cLorentzVector(q3)
+        q3Xq3 = ak.to_numpy(q3.mass2)
+        ca = self.convert_to_cLorentzVector(a)
+        h3Xa = ak.to_numpy(h3.dot(a))
+        ch3 = self.convert_to_cLorentzVector(h3)
+
+        #j[4] = T@(self.BreitWigner(self.m0_f2, self.Gamma0_f2, s3, m1, m2, 2)*(aXq3*cq3 - (q3Xq3/3.)*(ca - (h3Xa/s3)*ch3)))
+        j4a  = self.BreitWigner(self.m0_f2, self.Gamma0_f2, s3, m1, m2, 2)
+        j4b  = self.get_mult_arrs(cq3, aXq3) - self.get_mult_arrs((ca - self.get_mult_arrs(ch3, (h3Xa/s3))), (q3Xq3/3.))
+        #j4   = self.BreitWigner(self.m0_f2, self.Gamma0_f2, s3, m1, m2, 2)*(aXq3*cq3 - (q3Xq3/3.)*(ca - (h3Xa/s3)*ch3))
+        j4   = self.get_compJ_comps(j4a, j4b)
+        #j[4] = np.sum(T * j4.T, axis=1)
+        j[4] = T@j4
+        print(f"j[4]: {j[4]}, {j[4].shape}")
+
+
+        # ------------------ 5 -------------------- #
+        cQ3  = self.convert_to_cLorentzVector(Q3)
+        j5   = self.get_compJ_comps(self.BreitWigner(self.m0_sigma, self.Gamma0_sigma, s3, m1, m2, 0), cQ3)
+        #j[5] = np.sum(T * j5.T, axis=1)[:,:,np.newaxis]
+        j[5] = T@j5 
+        print(f"j[5]: {j[5]}, {j[5].shape}")
+
+        
+        # ------------------ 6 -------------------- # 
+        j6   = self.get_compJ_comps(self.BreitWigner(self.m0_f0, self.Gamma0_f0, s3, m1, m2, 0), cQ3)
+        #j[6] = np.sum(T * j6.T, axis=1)[:,:,np.newaxis]
+        j[6] = T@j6
+        print(f"j[6]: {j[6]}, {j[6].shape}")
+
+
+        print("sdcdsc", j[6] + j[5])
+
+        #retVal = np.zeros((4, snp.shape[0], 1) dtype=TComplex)
+        #retVal = np.zeros(4, dtype=TComplex)
+        retVal = self.get_mult_arrs(j[0], self.beta[0])
+        for idx in range(self.numResonances):
+            #retVal = retVal + j[idx]*self.beta[idx]
+            if idx == 0: continue
+            retVal += self.get_mult_arrs(j[idx], self.beta[idx])
+            
+        #retVal *= self.BreitWigner_a1(s)
+        retVal = self.get_mult_arrs(retVal, self.BreitWigner_a1(s))
+        
+        # CV: multiply with metric tensor in order to transform J^{mu} into J_{mu},
+        #     as required to insert J^{mu} given by Eq. (A2) of Phys.Rev.D 61 (2000) 012002 into
+        #     Eq. (3.15) of Comput.Phys.Commun. 64 (1991) 275
+        retVal = ((retVal.T)@(self.g.T)).T
+        #retVal = self.g@retVal
+        return retVal
+
+    
+    def get_mult_arrs(self, TCarr, arr):
+        """
+        TCarr :  np.array(4, dtype=TComplex) -> each entry: [[], [], [], ..., []]
+        arr: [[], [], [], ..., []]
+        """
+        retval = np.zeros(4, dtype=TComplex)
+        for i in range(TCarr.shape[0]):
+            retval[i] = TCarr[i]*arr
+        return retval
+
+    
+    def get_sum_arrs(self, TCarr, arr):
+        """
+        TCarr :  np.array(4, dtype=TComplex) -> each entry: [[], [], [], ..., []]
+        arr: [[], [], [], ..., []]
+        """
+        retval = np.zeros(4, dtype=TComplex)
+        for i in range(TCarr.shape[0]):
+            retval[i] = TCarr[i] + arr
+        return retval
+
+    
+    
+    def get_compJ_comps(self, BW, cLV):
+        """
+        cLV: numpy array of TComplex
+             [TCx, TCy, TCz, TCt] (4, ) : TCx -> [[21.1], [22.3], [65.1], ..., [12.5]] (nEvents, 1)
+        BW : numpy array of TComplex
+             [[TC], [TC], [TC], [TC], ...., [TC]]
+        """
+        print(" --- get_compJ_comps --- ")
+        comp = np.zeros(4, dtype=TComplex)
+        for i in range(cLV.shape[0]):
+            comp[i] = BW * cLV[i]
+        print(comp)
+        return comp
+
+    
+    def get_mult_comps(self, T, cLV):
+        """
+        cLV: numpy array of TComplex
+             [TCx, TCy, TCz, TCt] (4, ) : TCx -> [[21.1], [22.3], [65.1], ..., [12.5]] (nEvents, 1)
+        T  : numpy array of TComplex (4,4)
+             each entry: TC -> [[10.1], [2.5], [3.4], ...., [12.7]]
+        """
+        import copy
+        print(" --- get_compJ_comps --- ")
+
+        TcLV = np.zeros(4, dtype=TComplex)
+        for i in range(4):
+            print(i)
+            TcLVi = np.zeros(4, dtype=TComplex)
+            for j in range(4):
+                print(f"j: {j}")
+                print(T[i][j])
+                print(T[i][j].Re(), T[i][j].Im())
+                print(cLV[i])
+                print(cLV[i].Re(), cLV[i].Im())
+                TcLV0[i] = T[i][j]*cLV[i]
+                print(TcLV0[i])
+            TcLVi = np.sum(TcLV, axis=1)
+            print(TcLVi)
+            TcLV[i] = copy.deepcopy(TcLVi)
+
+        return TcLV
+
+
+    def convert_to_cLorentzVector(self, p):
+        """
+          Convert four-vector of type LorentzVector to type cLorentzVector
+          p four-vector [ak.Array]
+          return: cLorentzVector(p)
+        """
+        print(" --- convert_to_cLorentzVector --- ")
+        #vec = ak.zip(
+        #    {
+        #        "x": TComplex(p.x),
+        #        "y": TComplex(p.y),
+        #        "z": TComplex(p.z),
+        #        "t": TComplex(p.t),
+        #    },
+        #    with_name="LorentzVector",
+        #    behavior=vector.behavior,
+        #)
+        vec = np.zeros(4, dtype=TComplex)
+        for mu in range(4):
+            vec[mu] = TComplex(ak.to_numpy(self.get_component(p, mu)))
+        #vec = ak.Array(vec)
+        #vec = ak.from_regular(vec)
+        #vec = vec[:,np.newaxis]
+        print(f" >>> {vec}, {type(vec)}")
+        return vec
+
+
+    def convert_to_LorentzVector(self, p):
+        """
+          @brief Convert four-vector of type cLorentzVector to type LorentzVector. 
+          Note: The imaginary part of the four-vector given as function argument is discarded in the conversion.
+          @param p four-vector
+          @return LorentzVector(p)    
+        """
+        LV = ak.zip(
+            {
+                "x": p[0].Re(),
+                "y": p[1].Re(),
+                "z": p[2].Re(),
+                "t": p[3].Re(),
+            },
+            with_name = "LorentzVector",
+            behavior = vector.behavior,
+        )
+        return LV
+
+
+    
+    def star(self, p) -> np.array:
         """
           Components must be awkward array.
           Numpy array is not allowed here.
           returns:
             awkward array of Lorentz vectors [each components are ak.array of complex conjugate objects]
         """
-        out = ak.zip(
-            {
-                "x": p.x.Conjugate(),
-                "y": p.y.Conjugate(),
-                "z": p.z.Conjugate(),
-                "t": P.t.Conjugate()
-            },
-            with_name="LorentzVector",
-            behavior=vector.behavior
-        )
-        return out
+        #out = ak.zip(
+        #    {
+        #        "x": p.x.Conjugate(),
+        #        "y": p.y.Conjugate(),
+        #        "z": p.z.Conjugate(),
+        #        "t": P.t.Conjugate()
+        #    },
+        #    with_name="LorentzVector",
+        #    behavior=vector.behavior
+        #)
+        #return out
+        retVal = np.zeros(4, dtype=TComplex)
+        for mu in range(4):
+            retVal[mu] = p[mu].Conjugate()
+        return retVal
 
+        
 
     def get_component(self, p, mu):
         """
@@ -173,44 +485,6 @@ class PolarimetricA1:
         else: assert False
 
 
-    def convert_to_cLorentzVector(self, p):
-        """
-          Convert four-vector of type LorentzVector to type cLorentzVector
-          p four-vector [ak.Array]
-          return: cLorentzVector(p)
-        """
-        vec = ak.zip(
-            {
-                "x": TComplex(p.x),
-                "y": TComplex(p.y),
-                "z": TComplex(p.z),
-                "t": TComplex(p.t),
-            },
-            with_name="LorentzVector",
-            behavior=vector.behavior,
-        )
-        return vec
-
-
-    def convert_to_LorentzVector(self, p):
-        """
-          @brief Convert four-vector of type cLorentzVector to type LorentzVector. 
-          Note: The imaginary part of the four-vector given as function argument is discarded in the conversion.
-          @param p four-vector
-          @return LorentzVector(p)    
-        """
-        LV = ak.zip(
-            {
-                "x": p.x.Re(),
-                "y": p.y.Re(),
-                "z": p.z.Re(),
-                "t": p.t.Re(),
-            },
-            with_name = "LorentzVector",
-            behavior = vector.behavior,
-        )
-        return LV
-
     
     def comp_Pi(self, J, N):
         """
@@ -220,12 +494,85 @@ class PolarimetricA1:
         cN = self.convert_to_cLorentzVector(N) # LV -> complex LV
         Jstar = self.star(J)
 
-        JstarXN = Jstar.dot(self.g*cN)
-        JXN     = J.dot(self.g*cN)
-        JstarXJ = Jstar.dot(self.g*J)
+        JstarXN = Jstar.dot(self.g@cN)
+        JXN     = J.dot(self.g@cN)
+        JstarXJ = Jstar.dot(self.g@J)
 
-        retVal = self.convert_to_LorentzVector(2.*(JstarXN*J + JXN*Jstar - JstarXJ*cN))  
+        print(f" >>> JstarXN: {JstarXN.Re()}, {JstarXN.Im()}")
+        print(f" >>> JXN: {JXN.Re()}, {JXN.Im()}")
+        print(f" >>> JstarXJ: {JstarXJ.Re()}, {JstarXJ.Im()}")
+
+        cLV_1 = self.mult_arr_cLV(JstarXN,J)
+        print(f"cLV_1: {cLV_1}")
+        cLV_2 = self.mult_arr_cLV(JXN,Jstar)
+        print(f"cLV_2: {cLV_2}")
+        cLV_3 = self.mult_arr_cLV(JstarXJ,cN)
+        print(f"cLV_3: {cLV_3}")
+        
+        cLV = (self.mult_arr_cLV(JstarXN,J) + self.mult_arr_cLV(JXN,Jstar) - self.mult_arr_cLV(JstarXJ,cN))*2.0
+
+        print(f" >>> cLV: {cLV}")
+        
+        #retVal = self.convert_to_LorentzVector(2.*(JstarXN*J + JXN*Jstar - JstarXJ*cN))
+        retVal = self.convert_to_LorentzVector(cLV)
+        print(f" >>> retVal: {retVal}")
         return retVal
+
+
+    def mult_arr_cLV(self, arr, cLV):
+        retVal = np.zeros(4, dtype=TComplex)
+        for i in range(4):
+            retVal[i] = arr * cLV[i]
+        return retVal
+            
+    
+    def comp_Pi5(self, J, N):
+        """
+          J: awkward array of complex LorentzVector
+          N: awkward array of LorentzVector
+        """
+        cN = self.convert_to_cLorentzVector(N)
+        Jstar = self.star(J)
+
+        #J_     = [J[0], J[1], J[2], J[3]]
+        #Jstar_ = [Jstar[0], Jstar[1], Jstar[2], Jstar[3]]
+        #cN_    = [cN[0], cN[1], cN[2], cN[3]]
+        
+        ##nev = ak.to_numpy(J.x).shape[0]
+        #vProd = np.zeros(4, dtype=TComplex)
+        ##vProd = self.get_epsilon(0,0,0,0)*Jstar[0]*J[0]*cN[0]
+        #for mu in range(4):
+        #    for nu in range(4):
+        #        for rho in range(4):
+        #            for sigma in range(4):
+        #                epsilon = self.get_epsilon(mu, nu, rho, sigma)
+        #                vProd[mu] += epsilon*Jstar[nu]*J[rho]*cN[sigma]
+
+        vProd = np.zeros(4, dtype=TComplex)
+        vProd[0] = self.get_epsilon(0,0,0,0)*Jstar[0]*J[0]*cN[0]
+        vProd[1] = self.get_epsilon(1,0,0,0)*Jstar[0]*J[0]*cN[0]
+        vProd[2] = self.get_epsilon(2,0,0,0)*Jstar[0]*J[0]*cN[0]
+        vProd[3] = self.get_epsilon(3,0,0,0)*Jstar[0]*J[0]*cN[0]
+        for nu in range(1,4):
+            for rho in range(1,4):
+                for sigma in range(1,4):
+                    vProd[0] = vProd[0] + self.get_epsilon(0, nu, rho, sigma)*Jstar[nu]*J[rho]*cN[sigma]
+                    vProd[1] = vProd[1] + self.get_epsilon(1, nu, rho, sigma)*Jstar[nu]*J[rho]*cN[sigma]
+                    vProd[2] = vProd[2] + self.get_epsilon(2, nu, rho, sigma)*Jstar[nu]*J[rho]*cN[sigma]
+                    vProd[3] = vProd[3] + self.get_epsilon(3, nu, rho, sigma)*Jstar[nu]*J[rho]*cN[sigma]
+                        
+        vProd = self.g@vProd
+        retval = ak.zip(
+            {
+                "x": 2.*vProd[0].Im(),
+                "y": 2.*vProd[1].Im(),
+                "z": 2.*vProd[2].Im(),
+                "t": 2.*vProd[3].Im()
+            },
+            with_name="LorentzVector",
+            behavior=vector.behavior,            
+        )
+        return retval
 
 
     def sgn(self, x):
@@ -250,6 +597,7 @@ class PolarimetricA1:
                https://en.wikipedia.org/wiki/Levi-Civita_symbol
              (Section "Definition" -> "Generalization to n dimensions")
         """
+        """
         a = 0*np.array[4]
         a[0] = mu
         a[1] = nu
@@ -260,43 +608,15 @@ class PolarimetricA1:
             for j in range(4):
                 epsilon *= self.sgn(a[j] - a[i])
         return epsilon
+        """
+        a = [mu, nu, rho, sigma]
+        epsilon = 1.
+        for i in range(4):
+            for j in range(i+1,4):
+                epsilon *= self.sgn(a[j] - a[i])
+        return epsilon
 
     
-    def comp_Pi5(self, J, N):
-        """
-          J: awkward array of complex LorentzVector
-          N: awkward array of LorentzVector
-        """
-        cN = self.convert_to_cLorentzVector(N)
-        Jstar = self.star(J)
-
-        J_     = [J.x, J.y, J.z, J.t]
-        Jstar_ = [Jstar.x, Jstar.y, Jstar.z, Jstar.t]
-        cN_    = [cN.x, cN.y, cN.z, cN.t]
-
-        nev = ak.to_numpy(J.x).shape[0]
-        vProd = np.zeros((4, nev, 1), dtype=TComplex)
-        for mu in range(4):
-            for nu in range(4):
-                for rho in range(4):
-                    for sigma in range(4):
-                        epsilon = self.get_epsilon(mu, nu, rho, sigma)
-                        vProd[mu] += epsilon*Jstar[nu]*J[rho]*cN[sigma]
-        #vProd = self.g*vProd
-        vProd = np.sum(self.g * vProd.T, axis=1)[:,:,np.newaxis]
-        retval = ak.zip(
-            {
-                "x": 2.*vProd[0].Im(),
-                "y": 2.*vProd[1].Im(),
-                "z": 2.*vProd[2].Im(),
-                "t": 2.*vProd[3].Im()
-            },
-            with_name="LorentzVector",
-            behavior=vector.behavior,            
-        )
-        return retval
-
-
     def kdash(self, si, mj, mk):
         """
          @brief Compute "decay momentum",
@@ -360,125 +680,21 @@ class PolarimetricA1:
         return:
           Array of TComplex objects [awkward or numpy??? probably should be numpy :| ]
         """
+        print(" --- BreitWigner --- ")
         num = -np.power(m0, 2)
-        denom = TComplex(si - np.power(m0, 2), m0*self.Gamma(m0, Gamma0, si, mj, mk, L))
-        #denom = TComplex(ak.to_numpy(si - np.power(m0, 2)), ak.to_numpy(m0*self.Gamma(m0, Gamma0, si, mj, mk, L)))
-        
-        retVal = TComplex(num, 0.)/denom
-        return retVal
+        real = si + num
+        imag = self.Gamma(m0, Gamma0, si, mj, mk, L)*m0
+        print(f" >>> Num  : {num}")
+        print(f" >>> Real : {real}")
+        print(f" >>> Imag : {imag}")
+        ##denom = TComplex(real, imag)
+        denom = TComplex(ak.to_numpy(real), ak.to_numpy(imag))
+        ##denom = TComplex(ak.to_numpy(si - np.power(m0, 2)), ak.to_numpy(m0*self.Gamma(m0, Gamma0, si, mj, mk, L)))
+        #print(f" >>> denom: {type(denom)}\t{denom.Re()},{denom.Re().shape}\t{denom.Im()},{denom.Im().shape}")
+        retval = TComplex(num, 0.)/denom
+        #print(f" >>> retval: {type(retval)}\t{retval.Re()},{retval.Re().shape}\t{retval.Im()},{retval.Im().shape}")
 
-
-
-    def comp_J(self, p1: ak.Array, p2: ak.Array, p3: ak.Array) -> TComplex:
-        """
-        Args:
-          p1, p2, p3: awkward array of Lorentz Vectors
-
-        Return:
-          Awkward array of TComplex objects
-        """
-        q1 = p2 - p3
-        q2 = p3 - p1
-        q3 = p1 - p2
-
-        h1 = p2 + p3
-        Q1 = h1 - p1
-        s1 = h1.mass2
-        h2 = p1 + p3
-        Q2 = h2 - p2
-        s2 = h2.mass2
-        h3 = p1 + p2
-        Q3 = h3 - p3
-        s3 = h3.mass2
-
-        m1, m2, m3 = 0., 0., 0.
-        if self.decayChannel == "k3ChargedPi":
-            m1 = self.m_chargedPi
-            m2 = self.m_chargedPi
-            m3 = self.m_chargedPi
-        elif self.decayChannel == "kChargedPi2NeutralPi":
-            m1 = self.m_neutralPi
-            m2 = self.m_neutralPi
-            m3 = self.m_chargedPi
-        else:
-            raise RuntimeError(f"Error in <PolarimetricVectorTau2a1::comp_J>: Invalid parameter 'decayChannel' = {self.decayChannel}")
-
-  
-        a = p1 + p2 + p3
-        s = a.mass2
-
-        T = np.zeros((4,4), dtype=TComplex)
-        for mu in range(4):
-            for nu in range(4):
-                # CV: all vectors without explicit mu indices are assumed to have the mu index as subscript,
-                #     hence multiplication with the product of metric tensors g^{mu,mu}*g^{nu,nu} is required to transform
-                #     the return value of the functions get_component(a, mu)*get_component(a, nu) into the expression a^{mu}*a^{nu}
-                #     when computing T^{mu,nu} = g^{mu,nu} - a^{mu}a^{nu}/a^2,
-                #     as described in text following Eq. (A2) in Phys.Rev.D 61 (2000) 012002
-                #comp1np = ak.to_numpy(self.get_component(a, mu))
-                #comp2np = ak.to_numpy(self.get_component(a, nu))
-                #snp     = ak.to_numpy(s)
-                #T[mu][nu] = TComplex(self.g[mu][nu] - self.g[mu][mu]*self.g[nu][nu]*self.get_component(a, mu)*self.get_component(a, nu)/s)
-                T[mu][nu] = TComplex(ak.flatten(self.g[mu][nu] - self.g[mu][mu]*self.g[nu][nu]*self.get_component(a, mu)*self.get_component(a, nu)/s))
-                #T[mu][nu] = TComplex((self.g[mu][nu] - self.g[mu][mu]*self.g[nu][nu]*comp1np*comp2np/snp).flatten())
-                
-
-        # compute amplitudes for individual resonances according to Eq. (A3) in Phys.Rev.D 61 (2000) 012002
-        # Note: all the factors F_R in Eq. (A3) are equal to one, as the nominal fit assumes the a1 size parameter R to be zero
-        #j = [np.zeros((4,snp.shape[0],1), dtype=TComplex) for _ in range(self.numResonances)]
-        j = [np.zeros(4, dtype=TComplex) for _ in range(self.numResonances)]
-
-        cq1 = self.convert_to_cLorentzVector(q1)
-        cq2 = self.convert_to_cLorentzVector(q2)
-        #j[0] = T@(self.BreitWigner(self.m0_rho770,  self.Gamma0_rho770,  s1, m2, m3, 1)*cq1 - self.BreitWigner(self.m0_rho770,  self.Gamma0_rho770,  s2, m1, m3, 1)*cq2)
-        #j[1] = T@(self.BreitWigner(self.m0_rho1450, self.Gamma0_rho1450, s1, m2, m3, 1)*cq1 - self.BreitWigner(self.m0_rho1450, self.Gamma0_rho1450, s2, m1, m3, 1)*cq2)
-        j0   = self.BreitWigner(self.m0_rho770,  self.Gamma0_rho770,  s1, m2, m3, 1)*cq1 - self.BreitWigner(self.m0_rho770,  self.Gamma0_rho770,  s2, m1, m3, 1)*cq2 
-        j[0] = np.sum(T * j0.T, axis=1)
-        j1   = self.BreitWigner(self.m0_rho1450, self.Gamma0_rho1450, s1, m2, m3, 1)*cq1 - self.BreitWigner(self.m0_rho1450, self.Gamma0_rho1450, s2, m1, m3, 1)*cq2
-        j[1] = np.sum(T * j1.T, axis=1)
-
-        aXq1 = a.dot(q1)
-        cQ1 = self.convert_to_cLorentzVector(Q1)
-        aXq2 = a.dot(q2)
-        cQ2 = self.convert_to_cLorentzVector(Q2)
-        #j[2] = T@(aXq1*self.BreitWigner(self.m0_rho770,  self.Gamma0_rho770,  s1, m2, m3, 1)*cQ1 - aXq2*self.BreitWigner(self.m0_rho770,  self.Gamma0_rho770,  s2, m1, m3, 1)*cQ2)
-        #j[3] = T@(aXq1*self.BreitWigner(self.m0_rho1450, self.Gamma0_rho1450, s1, m2, m3, 1)*cQ1 - aXq2*self.BreitWigner(self.m0_rho1450, self.Gamma0_rho1450, s2, m1, m3, 1)*cQ2)
-        j2   = aXq1*self.BreitWigner(self.m0_rho770,  self.Gamma0_rho770,  s1, m2, m3, 1)*cQ1 - aXq2*self.BreitWigner(self.m0_rho770,  self.Gamma0_rho770,  s2, m1, m3, 1)*cQ2
-        j[2] = np.sum(T * j2.T, axis=1)
-        j3   = aXq1*self.BreitWigner(self.m0_rho1450, self.Gamma0_rho1450, s1, m2, m3, 1)*cQ1 - aXq2*self.BreitWigner(self.m0_rho1450, self.Gamma0_rho1450, s2, m1, m3, 1)*cQ2
-        j[3] = np.sum(T * j3.T, axis=1)
-
-        aXq3 = a.dot(q3)
-        cq3 = self.convert_to_cLorentzVector(q3)
-        q3Xq3 = q3.mass2
-        ca = self.convert_to_cLorentzVector(a)
-        h3Xa = h3.dot(a)
-        ch3 = self.convert_to_cLorentzVector(h3)
-        #j[4] = T@(self.BreitWigner(self.m0_f2, self.Gamma0_f2, s3, m1, m2, 2)*(aXq3*cq3 - (q3Xq3/3.)*(ca - (h3Xa/s3)*ch3)))
-        j4   = self.BreitWigner(self.m0_f2, self.Gamma0_f2, s3, m1, m2, 2)*(aXq3*cq3 - (q3Xq3/3.)*(ca - (h3Xa/s3)*ch3))
-        j[4] = np.sum(T * j4.T, axis=1)
-        
-        cQ3 = self.convert_to_cLorentzVector(Q3)
-        #j[5] = T@(self.BreitWigner(self.m0_sigma, self.Gamma0_sigma, s3, m1, m2, 0)*cQ3)
-        #j[6] = T@(self.BreitWigner(self.m0_f0, self.Gamma0_f0, s3, m1, m2, 0)*cQ3)
-        j5   = self.BreitWigner(self.m0_sigma, self.Gamma0_sigma, s3, m1, m2, 0)*cQ3
-        j[5] = np.sum(T * j5.T, axis=1)[:,:,np.newaxis]
-        j6   = self.BreitWigner(self.m0_f0, self.Gamma0_f0, s3, m1, m2, 0)*cQ3
-        j[6] = np.sum(T * j6.T, axis=1)[:,:,np.newaxis]
-
-        #retVal = np.zeros((4, snp.shape[0], 1) dtype=TComplex)
-        retVal = np.zeros(4, dtype=TComplex)
-        for idx in range(self.numResonances):
-            retVal += self.beta[idx]*j[idx]
-
-        retVal *= self.BreitWigner_a1(s)
-        
-        # CV: multiply with metric tensor in order to transform J^{mu} into J_{mu},
-        #     as required to insert J^{mu} given by Eq. (A2) of Phys.Rev.D 61 (2000) 012002 into
-        #     Eq. (3.15) of Comput.Phys.Commun. 64 (1991) 275
-        retVal = self.g@retVal
-        return retVal
-    
+        return retval
 
 
     def m_a1(self, s: ak.Array) -> float:
@@ -486,32 +702,71 @@ class PolarimetricA1:
 
 
     def Gamma_a1(self, s: ak.Array) -> ak.Array:
+        print(f"s: {s}")
+        
         mask1       = (s - self.Gamma_a1_vs_s[0][0]) <= 0
+        print(f"mask1: {mask1}")
         mask1result = self.Gamma_a1_vs_s[0][1]*ak.ones_like(s)
-        mask2       = (s - self.Gamma_a1_vs_s_[-1][0]) >= 0
-        mask2result = self.Gamma_a1_vs_s_[-1][1]*ak.ones_like(s) 
+        print(f"mask1result: {mask1result}")
+        mask2       = (s - self.Gamma_a1_vs_s[-1][0]) >= 0
+        print(f"mask2: {mask2}")
+        mask2result = self.Gamma_a1_vs_s[-1][1]*ak.ones_like(s) 
+        print(f"mask2result: {mask2result}")
         
         gamma_left  = ak.Array([a[0] for a in self.Gamma_a1_vs_s])
+        print(f"gamma_left: {gamma_left}")
         gamma_right = ak.Array([a[1] for a in self.Gamma_a1_vs_s])
-
+        print(f"gamma_right: {gamma_right}")
+        
         gammaS, gammaL = ak.broadcast_arrays(ak.to_numpy(s), ak.to_numpy(gamma_left))
         _     , gammaR = ak.broadcast_arrays(ak.to_numpy(s), ak.to_numpy(gamma_right))
 
         gammaS = ak.from_regular(gammaS)
         gammaL = ak.from_regular(gammaL)
         gammaR = ak.from_regular(gammaR)
-
+        print(gammaS, gammaL, gammaR)
+        
         diffLS = gammaS - gammaL
+        print(f"diffLS: {diffLS}")
         mask_low  = diffLS >= 0.0
         mask_high = diffLS <= 0.0
+        print(f"mask_low: {mask_low}")
+        print(f"mask_high: {mask_high}")
         
-        idx_low    = ak.local_index(gammaL)[mask_low]
-        idx_high   = ak.local_index(gammaL)[mask_high]
+        idx_low    = ak.local_index(gammaL)[mask_low][:,-1:]
+        idx_high   = ak.local_index(gammaL)[mask_high][:,0:1]
+        print(f"idx_low: {idx_low}, {idx_low.type}")
+        print(f"idx_high: {idx_high}, {idx_high.type}")
 
-        s_lo = gammaL[idx_low][:,-1][:,None]
-        s_hi = gammaL[idx_high][:,1][:,None]
-        Gamma_lo = gammaR[idx_low][:,-1][:,None]
-        Gamma_hi = gammaR[idx_high][:,1][:,None]
+        
+        #print(idx_low[:,-1:])
+        #print(idx_high[:,0:1])
+        print(gammaL[idx_low])
+        print(gammaL[idx_high])
+        
+        #s_lo = gammaL[idx_low][:,-1][:,None]
+        #s_hi = gammaL[idx_high][:,1][:,None]
+        #Gamma_lo = gammaR[idx_low][:,-1][:,None]
+        #Gamma_hi = gammaR[idx_high][:,1][:,None]
+        s_lo = gammaL[idx_low]
+        s_hi = ak.fill_none(ak.pad_none(gammaL[idx_high], 1, axis=-1), 0)
+        Gamma_lo = gammaR[idx_low]
+        Gamma_hi = ak.fill_none(ak.pad_none(gammaR[idx_high], 1, axis=-1), 0)
+
+        #for i in range(35094):
+        #    print(s_lo[i], s_hi[i], Gamma_lo[i], Gamma_hi[i])
+
+        
+        
+        print(ak.min(ak.num(s_lo, axis=1)),     ak.sum(ak.num(s_lo, axis=1)), s_lo[1816], s_lo[7363])
+        print(ak.min(ak.num(s_hi, axis=1)),     ak.sum(ak.num(s_hi, axis=1)), s_hi[1816], s_hi[7363])
+        print(ak.min(ak.num(Gamma_lo, axis=1)), ak.sum(ak.num(Gamma_lo, axis=1)), Gamma_lo[1816], Gamma_lo[7363])
+        print(ak.min(ak.num(Gamma_hi, axis=1)), ak.sum(ak.num(Gamma_hi, axis=1)), Gamma_hi[1816], Gamma_hi[7363])
+
+        print(ak.argsort(ak.num(s_hi, axis=1), ascending=True))
+        
+        #print((ak.to_numpy(s)).shape, (ak.to_numpy(s_lo)).shape, (ak.to_numpy(s_hi)).shape)
+        print(s.type, s_lo.type, s_hi.type)
         
         retVal = ak.where(mask1,
                           mask1result,
@@ -520,7 +775,8 @@ class PolarimetricA1:
                                    (Gamma_lo*(s_hi - s) + Gamma_hi*(s - s_lo)) / (s_hi - s_lo)
                                    )
                           )
-        
+
+        print(retVal)
         return retVal
 
 

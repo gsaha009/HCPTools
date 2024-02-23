@@ -112,24 +112,38 @@ def printinfo(p4, type="p", plot=True, log=False):
         print(f"    pz: {p4.pz}")
         print(f"    E: {p4.energy}")
         if plot:
-            plotit(arrlist=[ak.ravel(p4.px).to_numpy(),
-                            ak.ravel(p4.py).to_numpy(),
-                            ak.ravel(p4.pz).to_numpy(),
-                            ak.ravel(p4.energy).to_numpy()],
+            #plotit(arrlist=[ak.ravel(p4.px).to_numpy(),
+            #                ak.ravel(p4.py).to_numpy(),
+            #                ak.ravel(p4.pz).to_numpy(),
+            #                ak.ravel(p4.energy).to_numpy()],
+            #       bins=50,
+            #       log=log)
+            plotit(arrlist=[ak.fill_none(ak.flatten(p4.px),0).to_numpy(),
+                            ak.fill_none(ak.flatten(p4.py),0).to_numpy(),
+                            ak.fill_none(ak.flatten(p4.pz),0).to_numpy(),
+                            ak.fill_none(ak.flatten(p4.energy),0).to_numpy()],
                    bins=50,
                    log=log)
+
     elif type=="pt":
         print(f"    pt: {p4.pt}")
         print(f"    eta: {p4.eta}")
         print(f"    phi: {p4.phi}")
         print(f"    M: {p4.mass}")
         if plot:
-            plotit(arrlist=[ak.ravel(p4.pt).to_numpy(),
-                            ak.ravel(p4.eta).to_numpy(),
-                            ak.ravel(p4.phi).to_numpy(),
-                            ak.ravel(p4.mass).to_numpy()],
+            #plotit(arrlist=[ak.ravel(p4.pt).to_numpy(),
+            #                ak.ravel(p4.eta).to_numpy(),
+            #                ak.ravel(p4.phi).to_numpy(),
+            #                ak.ravel(p4.mass).to_numpy()],
+            #       bins=50,
+            #       log=log)
+            plotit(arrlist=[ak.fill_none(ak.flatten(p4.pt),0).to_numpy(),
+                            ak.fill_none(ak.flatten(p4.eta),0).to_numpy(),
+                            ak.fill_none(ak.flatten(p4.phi),0).to_numpy(),
+                            ak.fill_none(ak.flatten(p4.mass),0).to_numpy()],
                    bins=50,
                    log=log)
+
     else:
         print(f"    x: {p4.x}")
         print(f"    y: {p4.y}")

@@ -4,7 +4,7 @@ import numpy as np
 import awkward as ak
 from PhiCPBase import PhiCPBase
 from PolarimetricA1 import PolarimetricA1
-#from PolarimetricA1_CV_KS import PolarimetricVectorA1
+#from PolarimetricA1CV import PolarimetricA1
 from util import *
 
 
@@ -122,6 +122,10 @@ class PhiCPComp(PhiCPBase):
         print("  ===> ss pion2 in lab frame ===>")
         printinfo(p4_ss2_pi)
         printinfo(p4_ss2_pi, "pt")
+        print("  ===> a1 in lab frame ===>")
+        A = p4_os_pi + p4_ss1_pi + p4_ss2_pi
+        printinfo(A)
+        printinfo(A, "pt")
 
         print("  ===> Boostvec: Higgs Rest Frame ===>")
         printinfoP3(boostvec)
@@ -220,16 +224,21 @@ class PhiCPComp(PhiCPBase):
         #                           0.1396*ak.ones_like(p4_ss2_pi_trf.pt))
         """
         
-        #a1pol  = PolarimetricA1(p4_tau_HRF, p4_os_pi_HRF, p4_ss1_pi_HRF, p4_ss2_pi_HRF, charge)
-        #a1pol = PolarimetricA1(p4_tau_trf, p4_os_pi_trf, p4_ss1_pi_trf, p4_ss2_pi_trf, charge)
+        ###a1pol  = PolarimetricA1(p4_tau_HRF, p4_os_pi_HRF, p4_ss1_pi_HRF, p4_ss2_pi_HRF, charge)
+        ###a1pol = PolarimetricA1(p4_tau_trf, p4_os_pi_trf, p4_ss1_pi_trf, p4_ss2_pi_trf, charge)
+        """
+        print("Christian")
+        a1pol = PolarimetricA1(p4_tau, p4_os_pi, p4_ss1_pi, p4_ss2_pi, charge, "k3ChargedPi")
+        out = a1pol.PVC()
+        #out = a1pol.Vector(p4_os_pi, p4_ss1_pi, p4_ss2_pi, p4_tau, charge, "k3ChargedPi")
+        
+        """
+        print("Vladimir")
         a1pol  = PolarimetricA1(p4_tau_HRF, p4_os_pi_HRF, p4_ss1_pi_HRF, p4_ss2_pi_HRF,
                                 a1_temp_p4_HRF, nu_temp_p4_HRF,
                                 charge)
-        
-        #a1pol = PolarimetricVectorA1()
-        #out = a1pol.Vector(p4_os_pi, p4_ss1_pi, p4_ss2_pi, p4_tau, charge, "k3ChargedPi")
-        
         out = -a1pol.PVC().pvec
+
         print(f"  hvec : {out}")
         printinfoP3(out, plot=False)
         return out, p4_tau_HRF

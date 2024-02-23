@@ -4,7 +4,7 @@ import awkward as ak
 import matplotlib.pyplot as plt
 
 from TComplex import TComplex
-from PolarimetricA1 import PolarimetricA1
+#from PolarimetricA1 import PolarimetricA1
 from typing import Optional
 from coffea.nanoevents.methods import vector
 from util import *
@@ -34,7 +34,6 @@ class PhiCPBase:
     def setboost(self, p4, bv):
         return p4.boost(bv.negative())
 
-    
     def Mag2(self, vect):
         vect4 = vect
         vect3 = vect.pvec

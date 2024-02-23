@@ -381,13 +381,11 @@ class PolarimetricA1:
         print(f">> 1/omega/P.mass: {1/omega/P.mass}")
 
         
-        #out = ((A * CLAmCLV) - P*(P.dot(CLA) - P.dot(CLV)))*(1/omega/P.mass)
-        #out = ((A * CLAmCLV) - P*(P.dot(CLA) - P.dot(CLV)))*(1/omega/M_)
-        #out = A * (CLA - CLV) + P*P.mass
-        out = ((P.mass)*(P.mass)*(CLA-CLV) + P*omega)*(P.mass/omega)
-        #out = ((P.mass)*(P.mass)*(CLA-self.SIGN*CLV) + P*omega)*(P.mass/omega)
+        out = ((P.mass)*(P.mass)*(CLA-CLV) - P*(P.dot(CLA) - P.dot(CLV)))*(1/omega/P.mass)
+        #out = ((P.mass)*(P.mass)*(CLA-CLV) + P*omega)*(P.mass/omega)
 
         print(f">> PVC out : {out}")
+        plotit(arrlist=[ak.ravel(out.mass).to_numpy()])
 
         print(f">> PVC : End ")
         return out

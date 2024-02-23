@@ -129,6 +129,10 @@ class TComplex:
         else:
             raise TypeError(f"Unsupported type for multiplication: {type(other)}")
 
+    def __rmul__(self, other):
+        return self.__mul__(other)
+
+    
     def __add__(self, other):
         if isinstance(other, TComplex):
             return TComplex(self.fRe + other.fRe, self.fIm + other.fIm)
@@ -137,6 +141,10 @@ class TComplex:
         else:
             raise TypeError(f"Unsupported type for addition: {type(other)}")
 
+    def __radd__(self, other):
+        return self.__add__(other)
+
+        
     def __truediv__(self, other):
         if isinstance(other, TComplex):
             rho2 = other.Rho2()
@@ -167,3 +175,23 @@ class TComplex:
             theta = self.Theta()
             return TComplex(np.exp(lrho * other.fRe - theta * other.fIm), lrho * other.fIm + theta * other)
 
+
+    def __iadd__(self, other):
+        if isinstance(other, TComplex):
+            self.fRe += other.fRe
+            self.fIm += other.fIm
+        elif isinstance(other, (int, float, np.array, ak.Array)):
+            self.fRe += other
+        else:
+            raise TypeError(f"Unsupported type for addition: {type(other)}")
+        return self
+        
+    """
+    # Overload multiplication for numpy arrays
+    def __array_ufunc__(self, ufunc, method, *inputs, **kwargs):
+        if ufunc.__name__ == 'multiply':
+            return np.array([self * other for other in inputs[0]])
+        else:
+            return NotImplemented
+    """
+    
