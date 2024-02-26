@@ -83,12 +83,22 @@ class PolarimetricA1:
         self.beta = [TComplex(self.beta_moduli[i], self.beta_phases[i]*np.pi, True) for i in range(self.numResonances)]
 
         # metric tensor g^{mu,nu}
-        self.g = np.array([[-1.0, -1.0, -1.0, -1.0],
-                           [ 0.0, -1.0,  0.0, -1.0],
-                           [ 0.0,  0.0, -1.0, -1.0],
-                           [ 0.0,  0.0,  0.0,  1.0]])
+        self.g = np.zeros((4,4), dtype=TComplex)
+        for mu in range(4):
+            for nu in range(4):
+                self.g[mu][nu] = self.get_g(mu, nu)
+        #self.g = np.array([[-1.0, -1.0, -1.0, -1.0],
+        #                   [ 0.0, -1.0,  0.0, -1.0],
+        #                   [ 0.0,  0.0, -1.0, -1.0],
+        #                   [ 0.0,  0.0,  0.0,  1.0]])
         
 
+    def get_g(self, mu: int, nu: int) -> int:
+        if (mu == 0 and nu == 0) or (mu == 1 and nu == 1) or (mu == 2 and nu == 2): return -1.0
+        elif mu == 3 and nu == 3:                                                   return 1.0
+        else:                                                                       return 0.0
+
+        
     def Boost(self,p,frame):
         boostvec = frame.boostvec
         return p.boost(boostvec.negative())
@@ -100,27 +110,23 @@ class PolarimetricA1:
     
     def PVC(self) -> ak.Array:
         #dummy = ak.zeros_like(self.P.pt)
-        #P = setp4("PtEtaPhiMLorentzVector",
-        #          dummy,
-        #          dummy,
-        #          dummy,
-        #          self.P.mass)
-        P  = self.Boost(self.P, self.P)
-        #p1 = self.p1
-        #p2 = self.p2
-        #p3 = self.p3
+        #P = setp4("PtEtaPhiMLorentzVector", dummy, dummy, dummy, self.P.mass)
+        #P  = self.Boost(self.P, self.P)
+        P  = self.P
+        p1 = self.p1
+        p2 = self.p2
+        p3 = self.p3
 
-        p1 = self.Boost(self.p1, self.P)
-        p2 = self.Boost(self.p2, self.P)
-        p3 = self.Boost(self.p3, self.P)
+        #p1 = self.Boost(self.p1, self.P)
+        #p2 = self.Boost(self.p2, self.P)
+        #p3 = self.Boost(self.p3, self.P)
         
         N = P - (p1 + p2 + p3)
 
-        # p1, p2, p3, decayChannel
-        J   = self.comp_J(p1, p2, p3)
-        print(f" >>> J: {J[0]}, {J[1]}, {J[2]}, {J[3]}")
-        print(f"J[0]: {J[0].Re()}, {J[0].Im()}, {type(J[0].Im())}")
-        print(f"J[1]: {J[1].Re()}, {J[1].Im()}, {type(J[1].Im())}")
+        J = self.comp_J(p1, p2, p3)
+        #print(f" >>> J: {J[0]}, {J[1]}, {J[2]}, {J[3]}")
+        #print(f"J[0]: {J[0].Re()}, {J[0].Im()}, {type(J[0].Im())}")
+        #print(f"J[1]: {J[1].Re()}, {J[1].Im()}, {type(J[1].Im())}")
         
         Pi  = self.comp_Pi(J, N)
         print(f" >>> Pi: {Pi}")
@@ -139,16 +145,26 @@ class PolarimetricA1:
         elif  self.taucharge == -1: sign = +1.
         else: assert False
 
+        print(f"sign: {sign}")
+        
         omega = P.dot(Pi - sign*gammaVA*Pi5)
-    
-        H = (1./(omega*P.mass))*(np.power(P.mass, 2)*(Pi5 - sign*gammaVA*Pi) - P.dot(Pi5 - sign*gammaVA*Pi)*P)
+        print(f"omega: {omega}, {type(omega)}")
 
+        print(f"1./(omega*self.m_tau): {1./(omega*self.m_tau)}")
+        print(f"np.power(self.m_tau, 2)*(Pi5 - sign*gammaVA*Pi): {np.power(self.m_tau, 2)*(Pi5 - sign*gammaVA*Pi)}")
+        print(f"P.dot(Pi5 - sign*gammaVA*Pi)*P: {P.dot(Pi5 - sign*gammaVA*Pi)*P}")
+        
+        P = setp4("LorentzVector", P.px, P.py, P.pz, P.energy)
+        #H = (1./(omega*P.mass))*(np.power(P.mass, 2)*(Pi5 - sign*gammaVA*Pi) - P.dot(Pi5 - sign*gammaVA*Pi)*P)
+        H = (1./(omega*self.m_tau))*(np.power(self.m_tau, 2)*(Pi5 - sign*gammaVA*Pi) - P.dot(Pi5 - sign*gammaVA*Pi)*P)
+        print(f"H: {H}, {type(H)}")
+        
         retVal = H.pvec.unit
 
         return retVal
 
 
-    def comp_J(self, p1: ak.Array, p2: ak.Array, p3: ak.Array) -> TComplex:
+    def comp_J(self, p1: ak.Array, p2: ak.Array, p3: ak.Array) -> np.array(4, dtype=TComplex):
         """
         Args:
           p1, p2, p3: awkward array of Lorentz Vectors
@@ -172,6 +188,10 @@ class PolarimetricA1:
         Q3 = h3 - p3
         s3 = h3.mass2
 
+        plotit(arrlist=[ak.fill_none(ak.flatten(s1),0).to_numpy(),
+                        ak.fill_none(ak.flatten(s2),0).to_numpy(),
+                        ak.fill_none(ak.flatten(s3),0).to_numpy()])
+        
         m1, m2, m3 = 0., 0., 0.
         if self.decayChannel == "k3ChargedPi":
             m1 = self.m_chargedPi
@@ -196,37 +216,48 @@ class PolarimetricA1:
                 #     the return value of the functions get_component(a, mu)*get_component(a, nu) into the expression a^{mu}*a^{nu}
                 #     when computing T^{mu,nu} = g^{mu,nu} - a^{mu}a^{nu}/a^2,
                 #     as described in text following Eq. (A2) in Phys.Rev.D 61 (2000) 012002
-                #comp1np = ak.to_numpy(self.get_component(a, mu))
-                #comp2np = ak.to_numpy(self.get_component(a, nu))
-                #snp     = ak.to_numpy(s)
+                comp1np = ak.to_numpy(self.get_component(a, mu))
+                comp2np = ak.to_numpy(self.get_component(a, nu))
+                snp     = ak.to_numpy(s)
                 #T[mu][nu] = TComplex(self.g[mu][nu] - self.g[mu][mu]*self.g[nu][nu]*self.get_component(a, mu)*self.get_component(a, nu)/s)
-                T[mu][nu] = TComplex(self.g[mu][nu] - self.g[mu][mu]*self.g[nu][nu]*self.get_component(a, mu)*self.get_component(a, nu)/ak.to_numpy(s))
-                #T[mu][nu] = TComplex((self.g[mu][nu] - self.g[mu][mu]*self.g[nu][nu]*comp1np*comp2np/snp).flatten())
+                #T[mu][nu] = TComplex(self.g[mu][nu] - self.g[mu][mu]*self.g[nu][nu]*self.get_component(a, mu)*self.get_component(a, nu)/ak.to_numpy(s))
+                T[mu][nu] = TComplex(self.g[mu][nu] - self.g[mu][mu]*self.g[nu][nu]*comp1np*comp2np/snp)
                 
 
-        print(f"T: {T}")
+        #print(f"T: {T}")
+        #print(type(T[0][2].Re()))
+        #print(type(T[0][2].Im()))
+        #for mu in range(4):
+        #    for nu in range(4):
+        #        print(f"T_Re: {T[mu][nu].Re()}")
+        #        print(f"T_Im: {T[mu][nu].Im()}")
         # compute amplitudes for individual resonances according to Eq. (A3) in Phys.Rev.D 61 (2000) 012002
         # Note: all the factors F_R in Eq. (A3) are equal to one, as the nominal fit assumes the a1 size parameter R to be zero
         #j = [np.zeros((4,snp.shape[0],1), dtype=TComplex) for _ in range(self.numResonances)]
-        j = [np.zeros(4, dtype=TComplex) for _ in range(self.numResonances)]
 
+
+        j = [np.zeros(4, dtype=TComplex) for _ in range(self.numResonances)]
         cq1 = self.convert_to_cLorentzVector(q1)
         cq2 = self.convert_to_cLorentzVector(q2)
-        
+
+        # ----------------------------------------------------------------------------------------------------------------- #
+        # ----------------------------------------------------- j [0] ----------------------------------------------------- #
+        # ----------------------------------------------------------------------------------------------------------------- #
+        print(" ----------------------------------------------------- j [0] ----------------------------------------------------- ")
         #j[0] = T@(self.BreitWigner(self.m0_rho770,  self.Gamma0_rho770,  s1, m2, m3, 1)*cq1 - self.BreitWigner(self.m0_rho770,  self.Gamma0_rho770,  s2, m1, m3, 1)*cq2)
         #j[1] = T@(self.BreitWigner(self.m0_rho1450, self.Gamma0_rho1450, s1, m2, m3, 1)*cq1 - self.BreitWigner(self.m0_rho1450, self.Gamma0_rho1450, s2, m1, m3, 1)*cq2)
         j01   = self.get_compJ_comps(self.BreitWigner(self.m0_rho770,  self.Gamma0_rho770,  s1, m2, m3, 1), cq1)
         j02   = self.get_compJ_comps(self.BreitWigner(self.m0_rho770,  self.Gamma0_rho770,  s2, m1, m3, 1), cq2)
         j0    = j01 - j02
         print(f"j0: {j0}")
-        #j0   = self.BreitWigner(self.m0_rho770,  self.Gamma0_rho770,  s1, m2, m3, 1)*cq1 - self.BreitWigner(self.m0_rho770,  self.Gamma0_rho770,  s2, m1, m3, 1)*cq2
-        #j[0] = np.sum(T * j0.T, axis=1)
         j[0]  = T@j0
         #j[0] = self.get_mult_comps(T, j0)
         print(f"j[0]: {j[0]}, {j[0].shape}")
 
-
-        # --------------------- 1 -------------------- #
+        # ----------------------------------------------------------------------------------------------------------------- #
+        # ----------------------------------------------------- j [1] ----------------------------------------------------- #
+        # ----------------------------------------------------------------------------------------------------------------- #
+        print(" ----------------------------------------------------- j [1] ----------------------------------------------------- ")
         j11   = self.get_compJ_comps(self.BreitWigner(self.m0_rho1450, self.Gamma0_rho1450, s1, m2, m3, 1), cq1)
         j12   = self.get_compJ_comps(self.BreitWigner(self.m0_rho1450, self.Gamma0_rho1450, s2, m1, m3, 1), cq2)
         j1    = j11 - j12
@@ -235,7 +266,10 @@ class PolarimetricA1:
         j[1] = T@j1
         print(f"j[1]: {j[1]}, {j[1].shape}")
         
-        # --------------------- 2 -------------------- #
+        # ----------------------------------------------------------------------------------------------------------------- #
+        # ----------------------------------------------------- j [2] ----------------------------------------------------- #
+        # ----------------------------------------------------------------------------------------------------------------- #
+        print(" ----------------------------------------------------- j [2] ----------------------------------------------------- ")
         aXq1 = ak.to_numpy(a.dot(q1))
         print(f"aXq1: {aXq1}")
         cQ1 = self.convert_to_cLorentzVector(Q1)
@@ -256,8 +290,10 @@ class PolarimetricA1:
         j[2]  = T@j2
         print(f"j[2]: {j[2]}, {j[2].shape}")
 
-        
-        # ------------------- 3 ----------------- #
+        # ----------------------------------------------------------------------------------------------------------------- #
+        # ----------------------------------------------------- j [3] ----------------------------------------------------- #
+        # ----------------------------------------------------------------------------------------------------------------- #
+        print(" ----------------------------------------------------- j [3] ----------------------------------------------------- ")
         j31  = self.get_compJ_comps(self.BreitWigner(self.m0_rho1450, self.Gamma0_rho1450, s1, m2, m3, 1), cQ1)
         j31  = self.get_mult_arrs(j31, aXq1)
 
@@ -271,7 +307,10 @@ class PolarimetricA1:
         print(f"j[3]: {j[3]}, {j[3].shape}")
         
 
-        # ------------------- 4 ------------------ #
+        # ----------------------------------------------------------------------------------------------------------------- #
+        # ----------------------------------------------------- j [4] ----------------------------------------------------- #
+        # ----------------------------------------------------------------------------------------------------------------- #
+        print(" ----------------------------------------------------- j [4] ----------------------------------------------------- ")
         aXq3 = ak.to_numpy(a.dot(q3))
         cq3 = self.convert_to_cLorentzVector(q3)
         q3Xq3 = ak.to_numpy(q3.mass2)
@@ -289,7 +328,10 @@ class PolarimetricA1:
         print(f"j[4]: {j[4]}, {j[4].shape}")
 
 
-        # ------------------ 5 -------------------- #
+        # ----------------------------------------------------------------------------------------------------------------- #
+        # ----------------------------------------------------- j [5] ----------------------------------------------------- #
+        # ----------------------------------------------------------------------------------------------------------------- #
+        print(" ----------------------------------------------------- j [5] ----------------------------------------------------- ")
         cQ3  = self.convert_to_cLorentzVector(Q3)
         j5   = self.get_compJ_comps(self.BreitWigner(self.m0_sigma, self.Gamma0_sigma, s3, m1, m2, 0), cQ3)
         #j[5] = np.sum(T * j5.T, axis=1)[:,:,np.newaxis]
@@ -297,14 +339,17 @@ class PolarimetricA1:
         print(f"j[5]: {j[5]}, {j[5].shape}")
 
         
-        # ------------------ 6 -------------------- # 
+        # ----------------------------------------------------------------------------------------------------------------- #
+        # ----------------------------------------------------- j [6] ----------------------------------------------------- #
+        # ----------------------------------------------------------------------------------------------------------------- #
+        print(" ----------------------------------------------------- j [6] ----------------------------------------------------- ")
         j6   = self.get_compJ_comps(self.BreitWigner(self.m0_f0, self.Gamma0_f0, s3, m1, m2, 0), cQ3)
         #j[6] = np.sum(T * j6.T, axis=1)[:,:,np.newaxis]
         j[6] = T@j6
         print(f"j[6]: {j[6]}, {j[6].shape}")
 
 
-        print("sdcdsc", j[6] + j[5])
+        #print("sdcdsc", j[6] + j[5])
 
         #retVal = np.zeros((4, snp.shape[0], 1) dtype=TComplex)
         #retVal = np.zeros(4, dtype=TComplex)
@@ -316,13 +361,21 @@ class PolarimetricA1:
             
         #retVal *= self.BreitWigner_a1(s)
         retVal = self.get_mult_arrs(retVal, self.BreitWigner_a1(s))
+
+        #for i in range(4):
+        #    print(f"alscascnjascn {i}:\n{retVal[i].Re()}\n{retVal[i].Im()}\n")
+        
         
         # CV: multiply with metric tensor in order to transform J^{mu} into J_{mu},
         #     as required to insert J^{mu} given by Eq. (A2) of Phys.Rev.D 61 (2000) 012002 into
         #     Eq. (3.15) of Comput.Phys.Commun. 64 (1991) 275
-        retVal = ((retVal.T)@(self.g.T)).T
-        #retVal = self.g@retVal
+        #retVal = ((retVal.T)@(self.g.T)).T
+        retVal = self.g@retVal
+        #for i in range(4):
+        #    print(f"{i}:\n{retVal[i].Re()}\n{retVal[i].Im()}\n")
         return retVal
+
+
 
     
     def get_mult_arrs(self, TCarr, arr):
@@ -419,24 +472,24 @@ class PolarimetricA1:
         return vec
 
 
-    def convert_to_LorentzVector(self, p):
+    def convert_to_LorentzVector(self, p) -> ak.Array:
         """
           @brief Convert four-vector of type cLorentzVector to type LorentzVector. 
           Note: The imaginary part of the four-vector given as function argument is discarded in the conversion.
           @param p four-vector
-          @return LorentzVector(p)    
+          @return LorentzVector(p)
         """
-        LV = ak.zip(
+        retVal = ak.zip(
             {
-                "x": p[0].Re(),
-                "y": p[1].Re(),
-                "z": p[2].Re(),
-                "t": p[3].Re(),
+                "x": p[0].Re() if not isinstance(p[0], np.ndarray) else ak.Array(p[0]),
+                "y": p[1].Re() if not isinstance(p[1], np.ndarray) else ak.Array(p[1]),
+                "z": p[2].Re() if not isinstance(p[2], np.ndarray) else ak.Array(p[2]),
+                "t": p[3].Re() if not isinstance(p[3], np.ndarray) else ak.Array(p[3]),
             },
             with_name = "LorentzVector",
             behavior = vector.behavior,
         )
-        return LV
+        return retVal
 
 
     
@@ -465,7 +518,7 @@ class PolarimetricA1:
 
         
 
-    def get_component(self, p, mu):
+    def get_component(self, p, mu) -> ak.Array:
         """
           @brief Return certain component of given four-vector
           @param p given four-vector
@@ -488,26 +541,32 @@ class PolarimetricA1:
     
     def comp_Pi(self, J, N):
         """
-          J: awkward array of complex LorentzVector
+          J: numpy array of complex LorentzVector
+             np.array([cLVx, cLVy, cLVz, cLVt])
+             cLVx -> TComplex obejct -> each object Re / Im: np.array([[],[],[],....,[]])
           N: awkward array of LorentzVector
+             ak.Array([{x:,y:,z:,t:},....]) 
         """
-        cN = self.convert_to_cLorentzVector(N) # LV -> complex LV
+        print("  --- comp_Pi --- ")
+        # LV -> complex LV
+        # Now same as J
+        cN = self.convert_to_cLorentzVector(N) 
         Jstar = self.star(J)
 
         JstarXN = Jstar.dot(self.g@cN)
         JXN     = J.dot(self.g@cN)
         JstarXJ = Jstar.dot(self.g@J)
 
-        print(f" >>> JstarXN: {JstarXN.Re()}, {JstarXN.Im()}")
-        print(f" >>> JXN: {JXN.Re()}, {JXN.Im()}")
-        print(f" >>> JstarXJ: {JstarXJ.Re()}, {JstarXJ.Im()}")
+        #print(f" >>> JstarXN: {JstarXN.Re()}, {JstarXN.Im()}")
+        #print(f" >>> JXN: {JXN.Re()}, {JXN.Im()}")
+        #print(f" >>> JstarXJ: {JstarXJ.Re()}, {JstarXJ.Im()}")
 
         cLV_1 = self.mult_arr_cLV(JstarXN,J)
-        print(f"cLV_1: {cLV_1}")
+        #print(f"cLV_1: {cLV_1}")
         cLV_2 = self.mult_arr_cLV(JXN,Jstar)
-        print(f"cLV_2: {cLV_2}")
+        #print(f"cLV_2: {cLV_2}")
         cLV_3 = self.mult_arr_cLV(JstarXJ,cN)
-        print(f"cLV_3: {cLV_3}")
+        #print(f"cLV_3: {cLV_3}")
         
         cLV = (self.mult_arr_cLV(JstarXN,J) + self.mult_arr_cLV(JXN,Jstar) - self.mult_arr_cLV(JstarXJ,cN))*2.0
 
@@ -528,9 +587,13 @@ class PolarimetricA1:
     
     def comp_Pi5(self, J, N):
         """
-          J: awkward array of complex LorentzVector
+          J: numpy array of complex LorentzVector
+             np.array([cLVx, cLVy, cLVz, cLVt])
+             cLVx -> TComplex obejct -> each object Re / Im: np.array([[],[],[],....,[]])
           N: awkward array of LorentzVector
+             ak.Array([{x:,y:,z:,t:},....]) 
         """
+        print("  --- comp_Pi 5 --- ")
         cN = self.convert_to_cLorentzVector(N)
         Jstar = self.star(J)
 
@@ -562,17 +625,28 @@ class PolarimetricA1:
                     vProd[3] = vProd[3] + self.get_epsilon(3, nu, rho, sigma)*Jstar[nu]*J[rho]*cN[sigma]
                         
         vProd = self.g@vProd
-        retval = ak.zip(
+        #retVal = ak.zip(
+        #    {
+        #        "x": 2.*vProd[0].Im(),
+        #        "y": 2.*vProd[1].Im(),
+        #        "z": 2.*vProd[2].Im(),
+        #        "t": 2.*vProd[3].Im()
+        #    },
+        #    with_name="LorentzVector",
+        #    behavior=vector.behavior,            
+        #)
+        retVal = ak.zip(
             {
-                "x": 2.*vProd[0].Im(),
-                "y": 2.*vProd[1].Im(),
-                "z": 2.*vProd[2].Im(),
-                "t": 2.*vProd[3].Im()
+                "x": ak.Array(2.*vProd[0].Im()),
+                "y": ak.Array(2.*vProd[1].Im()),
+                "z": ak.Array(2.*vProd[2].Im()),
+                "t": ak.Array(2.*vProd[3].Im())
             },
             with_name="LorentzVector",
             behavior=vector.behavior,            
         )
-        return retval
+        print(f"retVal: {retVal}")
+        return retVal
 
 
     def sgn(self, x):
@@ -630,7 +704,7 @@ class PolarimetricA1:
          @return k'_i
         """
         retVal = np.sqrt((si - np.power(mj + mk, 2))*(si - np.power(mj - mk, 2)))/(2.0*np.sqrt(si))
-        return retVal;
+        return retVal
 
 
     def Gamma(self, m0, Gamma0, si, mj, mk, L):
@@ -684,9 +758,9 @@ class PolarimetricA1:
         num = -np.power(m0, 2)
         real = si + num
         imag = self.Gamma(m0, Gamma0, si, mj, mk, L)*m0
-        print(f" >>> Num  : {num}")
-        print(f" >>> Real : {real}")
-        print(f" >>> Imag : {imag}")
+        #print(f" >>> Num  : {num}")
+        #print(f" >>> Real : {real}")
+        #print(f" >>> Imag : {imag}")
         ##denom = TComplex(real, imag)
         denom = TComplex(ak.to_numpy(real), ak.to_numpy(imag))
         ##denom = TComplex(ak.to_numpy(si - np.power(m0, 2)), ak.to_numpy(m0*self.Gamma(m0, Gamma0, si, mj, mk, L)))
@@ -705,18 +779,18 @@ class PolarimetricA1:
         print(f"s: {s}")
         
         mask1       = (s - self.Gamma_a1_vs_s[0][0]) <= 0
-        print(f"mask1: {mask1}")
+        #print(f"mask1: {mask1}")
         mask1result = self.Gamma_a1_vs_s[0][1]*ak.ones_like(s)
-        print(f"mask1result: {mask1result}")
+        #print(f"mask1result: {mask1result}")
         mask2       = (s - self.Gamma_a1_vs_s[-1][0]) >= 0
-        print(f"mask2: {mask2}")
+        #print(f"mask2: {mask2}")
         mask2result = self.Gamma_a1_vs_s[-1][1]*ak.ones_like(s) 
-        print(f"mask2result: {mask2result}")
+        #print(f"mask2result: {mask2result}")
         
         gamma_left  = ak.Array([a[0] for a in self.Gamma_a1_vs_s])
-        print(f"gamma_left: {gamma_left}")
+        #print(f"gamma_left: {gamma_left}")
         gamma_right = ak.Array([a[1] for a in self.Gamma_a1_vs_s])
-        print(f"gamma_right: {gamma_right}")
+        #print(f"gamma_right: {gamma_right}")
         
         gammaS, gammaL = ak.broadcast_arrays(ak.to_numpy(s), ak.to_numpy(gamma_left))
         _     , gammaR = ak.broadcast_arrays(ak.to_numpy(s), ak.to_numpy(gamma_right))

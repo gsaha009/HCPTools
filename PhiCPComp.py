@@ -3,8 +3,8 @@ import copy
 import numpy as np
 import awkward as ak
 from PhiCPBase import PhiCPBase
-from PolarimetricA1 import PolarimetricA1
-#from PolarimetricA1CV import PolarimetricA1
+#from PolarimetricA1 import PolarimetricA1
+from PolarimetricA1CV import PolarimetricA1
 from util import *
 
 
@@ -182,7 +182,9 @@ class PhiCPComp(PhiCPBase):
                         ak.ravel(s2_boost_com.mass2).to_numpy(),
                         ak.ravel(s3_boost_com.mass2).to_numpy()])
 
-        """
+        # -------------------------------------------------------- #
+        #                           CV                             #
+        # -------------------------------------------------------- #
         boost_ttrf = boostvec
         tauP4_ttrf = self.getP4_rf(p4_tau, boost_ttrf)        
         r, n, k = self.getHelicityAxes(boost_ttrf, tauP4_ttrf, p4_h, p4_tau)
@@ -198,47 +200,27 @@ class PhiCPComp(PhiCPBase):
         p4_tau_trf = self.getP4_ttrf_hf_trf(p4_tau, boost_ttrf, r, n, k, boost_trf)
         print(f" -----> OS Pion")
         p4_os_pi_trf = self.getP4_ttrf_hf_trf(p4_os_pi, boost_ttrf, r, n, k, boost_trf)
-        #p4_os_pi_trf = setp4_ptetaphim(p4_os_pi_trf.pt, p4_os_pi_trf.eta, p4_os_pi_trf.phi, 0.1396*ak.ones_like(p4_os_pi_trf.pt))
-        #p4_os_pi_trf = setp4("PtEtaPhiMLorentzVector",
-        #                          p4_os_pi_trf.pt,
-        #                          p4_os_pi_trf.eta,
-        #                          p4_os_pi_trf.phi,
-        #                          0.1396*ak.ones_like(p4_os_pi_trf.pt))
         
         print(f" -----> SS1 Pion")
         p4_ss1_pi_trf = self.getP4_ttrf_hf_trf(p4_ss1_pi, boost_ttrf, r, n, k, boost_trf)
-        #p4_ss1_pi_trf = setp4_ptetaphim(p4_ss1_pi_trf.pt, p4_ss1_pi_trf.eta, p4_ss1_pi_trf.phi, 0.1396*ak.ones_like(p4_ss1_pi_trf.pt))
-        #p4_ss1_pi_trf = setp4("PtEtaPhiMLorentzVector",
-        #                           p4_ss1_pi_trf.pt,
-        #                           p4_ss1_pi_trf.eta,
-        #                           p4_ss1_pi_trf.phi,
-        #                           0.1396*ak.ones_like(p4_ss1_pi_trf.pt))
 
         print(f" -----> SS2 Pion")
         p4_ss2_pi_trf = self.getP4_ttrf_hf_trf(p4_ss2_pi, boost_ttrf, r, n, k, boost_trf)
-        #p4_ss2_pi_trf = setp4_ptetaphim(p4_ss2_pi_trf.pt, p4_ss2_pi_trf.eta, p4_ss2_pi_trf.phi, 0.1396*ak.ones_like(p4_ss2_pi_trf.pt))
-        #p4_ss2_pi_trf = setp4("PtEtaPhiMLorentzVector",
-        #                           p4_ss2_pi_trf.pt,
-        #                           p4_ss2_pi_trf.eta,
-        #                           p4_ss2_pi_trf.phi,
-        #                           0.1396*ak.ones_like(p4_ss2_pi_trf.pt))
-        """
+        # -------------------------------------------------------- #
+        #                           CV                             #
+        # -------------------------------------------------------- #
         
-        ###a1pol  = PolarimetricA1(p4_tau_HRF, p4_os_pi_HRF, p4_ss1_pi_HRF, p4_ss2_pi_HRF, charge)
-        ###a1pol = PolarimetricA1(p4_tau_trf, p4_os_pi_trf, p4_ss1_pi_trf, p4_ss2_pi_trf, charge)
-        """
         print("Christian")
-        a1pol = PolarimetricA1(p4_tau, p4_os_pi, p4_ss1_pi, p4_ss2_pi, charge, "k3ChargedPi")
+        #a1pol = PolarimetricA1(p4_tau, p4_os_pi_HRF, p4_ss1_pi_HRF, p4_ss2_pi_HRF, charge, "k3ChargedPi")
+        a1pol = PolarimetricA1(p4_tau_trf, p4_os_pi_trf, p4_ss1_pi_trf, p4_ss2_pi_trf, charge, "k3ChargedPi")
         out = a1pol.PVC()
-        #out = a1pol.Vector(p4_os_pi, p4_ss1_pi, p4_ss2_pi, p4_tau, charge, "k3ChargedPi")
-        
         """
         print("Vladimir")
         a1pol  = PolarimetricA1(p4_tau_HRF, p4_os_pi_HRF, p4_ss1_pi_HRF, p4_ss2_pi_HRF,
                                 a1_temp_p4_HRF, nu_temp_p4_HRF,
                                 charge)
         out = -a1pol.PVC().pvec
-
+        """
         print(f"  hvec : {out}")
         printinfoP3(out, plot=False)
         return out, p4_tau_HRF

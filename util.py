@@ -104,7 +104,7 @@ def plotit(arrlist=[], bins=100, log=False, dim=(1,1)):
     fig.tight_layout()
     plt.show()
 
-    
+
 def printinfo(p4, type="p", plot=True, log=False):
     if type=="p":
         print(f"    px: {p4.px}")
